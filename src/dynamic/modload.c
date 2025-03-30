@@ -568,9 +568,13 @@ PONGO_EXPORT(task_critical_exit);
 PONGO_EXPORT(task_bind_to_irq);
 PONGO_EXPORT(task_release);
 PONGO_EXPORT(task_reference);
-PONGO_EXPORT(tz0_calculate_encrypted_block_addr);
-PONGO_EXPORT(tz_blackbird);
+PONGO_EXPORT(tz_get);
+PONGO_EXPORT(tz_set);
+PONGO_EXPORT(tz_locked);
+PONGO_EXPORT(tz_lock);
 PONGO_EXPORT(tz_lockdown);
+PONGO_EXPORT(tz_blackbird);
+PONGO_EXPORT(tz0_calculate_encrypted_block_offset);
 PONGO_EXPORT(vatophys);
 PONGO_EXPORT(vatophys_static);
 PONGO_EXPORT(lock_take);
@@ -661,6 +665,7 @@ PONGO_EXPORT(preboot_hook);
 PONGO_EXPORT(ramdisk_buf);
 PONGO_EXPORT(ramdisk_size);
 PONGO_EXPORT(sep_boot_hook);
+PONGO_EXPORT(sep_teardown_hook);
 PONGO_EXPORT(aes);
 PONGO_EXPORT(_impure_ptr);
 PONGO_EXPORT(loader_xfer_recv_size);
@@ -687,6 +692,31 @@ PONGO_EXPORT_RENAME(vfprintf, vfiprintf);
 PONGO_EXPORT_RENAME(snprintf, sniprintf);
 //PONGO_EXPORT_RENAME(vsniprintf, vsniprintf);
 PONGO_EXPORT_RENAME(vsnprintf, vsniprintf);
+
+PONGO_EXPORT(gFWVersion);
+
+// lib/libDER
+PONGO_EXPORT(DERDecodeItem);
+PONGO_EXPORT(DERDecodeSeqInit);
+PONGO_EXPORT(DERDecodeSeqNext);
+PONGO_EXPORT(DERParseSequenceContent);
+PONGO_EXPORT(DERImg4DecodeFindProperty);
+PONGO_EXPORT(DERParseInteger);
+
+// lib/img4
+PONGO_EXPORT(Img4DecodeInit);
+PONGO_EXPORT(Img4DecodeGetPayloadType);
+PONGO_EXPORT(Img4DecodeGetPayloadKeybag);
+PONGO_EXPORT(Img4DecodeGetPayload);
+PONGO_EXPORT(Img4Encode);
+PONGO_EXPORT(Img4EncodeRestoreInfo);
+
+// drivers/fuse
+PONGO_EXPORT(fuse_lock);
+
+// drivers/recfg
+PONGO_EXPORT(recfg_soc_lock);
+
 __asm__
 (
     ".section __DATA, __pongo_exports\n"

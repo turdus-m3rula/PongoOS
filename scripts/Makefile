@@ -29,7 +29,7 @@ ifndef $(HOST_OS)
 endif
 
 ifeq ($(HOST_OS),Darwin)
-	C_FLAGS     ?= -Wall -O3 -x objective-c $(CFLAGS)
+	C_FLAGS     ?= -Wall -O3 -x objective-c $(CFLAGS) -arch arm64 -arch x86_64 -mmacosx-version-min=10.12
 	LD_FLAGS    ?= -framework Foundation -framework CoreFoundation -framework IOKit $(LDFLAGS)
 else
 ifeq ($(HOST_OS),Linux)

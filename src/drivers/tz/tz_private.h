@@ -24,6 +24,14 @@
  * SOFTWARE.
  *
  */
-void sep_setup();
-void sep_teardown(void);
-extern void (*sepfw_kpf_hook)(void* sepfw_bytes, size_t sepfw_size);
+
+#ifndef TZ_PRIVATE_H
+#define TZ_PRIVATE_H
+
+#ifdef PONGO_PRIVATE
+
+void tz_setup(void);
+
+#endif
+
+#endif

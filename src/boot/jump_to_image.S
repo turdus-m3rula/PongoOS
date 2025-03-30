@@ -131,5 +131,8 @@ L_jump_to_image_tramp_end:
 
 .data
 .global _need_to_release_L3_SRAM
+.global _ipf_flag
 _need_to_release_L3_SRAM:
     .byte 0x69 // [0x69 = no, 0x41 = yes] - don't want this in zerofill
+_ipf_flag:
+    .quad 0x1337cafebabe4100

@@ -49,7 +49,6 @@
 #include "libDER/oids.h"
 #include "mipi/mipi.h"
 #include "aes/aes.h"
-#include "sep/sep.h"
 #endif
 
 // XXX: the includes here pull in stuff we historically declared in pongo.h
@@ -346,6 +345,7 @@ _Noreturn void pongo_entry(uint64_t* kernel_args, void* entryp, void (*exit_to_e
 int pongo_fiq_handler();
 extern void (*preboot_hook)();
 extern void (*sep_boot_hook)();
+extern void (*sep_teardown_hook)();
 extern void (*rdload_hook)();
 extern void vm_flush_by_addr_all_asid(uint64_t va);
 extern void task_register_coop(struct task* task, void (*entry)()); // registers a cooperative task

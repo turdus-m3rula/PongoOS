@@ -27,6 +27,7 @@
 #include <pongo.h>
 #include <aes/aes_private.h>
 #include <recfg/recfg_soc_private.h>
+#include <tz/tz_private.h>
 
 void shell_main();
 
@@ -74,7 +75,7 @@ void pongo_main_task() {
     aes_init();
 
     // Set up Secure Enclave
-    sep_setup();
+    // sep_setup();
 
     puts("");
     puts("#==================");

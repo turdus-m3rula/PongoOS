@@ -24,6 +24,10 @@
  * SOFTWARE.
  *
  */
+
+#ifndef __IMG4_H
+#define __IMG4_H
+
 #include <stdbool.h>
 #include <stdint.h>
 #include <strings.h>
@@ -113,3 +117,5 @@ DERReturn Img4DecodeInit(const DERByte *data, DERSize length, Img4 *img4);
 DERReturn Img4Encode(DERItem *der, const DERItem *items);
 DERReturn Img4EncodeRestoreInfo(DERItem *der, void *bytes, size_t len);
 DERReturn Img4EncodeSequence(DERTag tag, const void *src, DERShort numItems, const DERItemSpec *itemSpecs, DERItem *der);
+
+#endif

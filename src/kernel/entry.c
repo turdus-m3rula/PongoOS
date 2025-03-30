@@ -126,6 +126,7 @@ extern void _task_switch_asserted(struct task* new);
 char soc_name[9] = {};
 uint32_t socnum = 0x0;
 void (*sep_boot_hook)(void);
+void (*sep_teardown_hook)(void);
 
 __attribute__((noinline)) void pongo_entry_cached()
 {
@@ -263,7 +264,11 @@ __attribute__((noinline)) void pongo_entry_cached()
             break;
     }
 
-    sep_teardown();
+    // sep_teardown();
+    // If you need to run sep_teardown(), please implement it in sep_teardown_hook
+    if (sep_teardown_hook) {
+        sep_teardown_hook();
+    }
 
     // Flush changes to IORVBAR and the AES engine to recfg as late as possible.
     // If SEP needs this earlier, then the code in sep.c will make the necessary calls.

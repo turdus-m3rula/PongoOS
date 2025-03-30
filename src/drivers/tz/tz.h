@@ -25,13 +25,18 @@
  *
  */
 
+#ifndef TZ_H
+#define TZ_H
+
 #include <stdbool.h>
 #include <stdint.h>
 
-void tz_setup(void);
-void tz_lockdown(void);
+bool tz_get(uint8_t which, uint64_t *base, uint64_t *size);
+bool tz_set(uint8_t which, uint64_t base, uint64_t size);
+bool tz_locked(uint8_t which);
+bool tz_lock(uint8_t which);
+bool tz_lockdown(void);
 bool tz_blackbird(void);
-void *tz0_calculate_encrypted_block_addr(uint64_t offset);
-bool tz0_is_locked(void);
-uint64_t tz0_base(void);
-uint64_t tz0_size(void);
+uint64_t tz0_calculate_encrypted_block_offset(uint64_t offset);
+
+#endif

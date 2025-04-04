@@ -218,6 +218,7 @@ void patch_bootloader(void* boot_image)
         if (sigcheck(boot_image)) {
             goto fail;
         }
+        strcpy((void*)((uintptr_t)boot_image + 0x200), "Stage2 KJC loader");
     }
 
     // Trampoline patch

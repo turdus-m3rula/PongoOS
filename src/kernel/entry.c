@@ -49,7 +49,7 @@ struct task pongo_task = {.name = "main"};
 
 */
 
-int pongo_fiq_handler() {
+int pongo_fiq_handler(void) {
     timer_rearm();
     return !!(task_current()->flags & TASK_PREEMPT);
 }
@@ -61,7 +61,7 @@ int pongo_fiq_handler() {
 
 */
 
-__attribute__((noinline)) void pongo_reinstall_vbar() {
+__attribute__((noinline)) void pongo_reinstall_vbar(void) {
     set_vbar_el1((uint64_t)&exception_vector);
 }
 
@@ -81,7 +81,7 @@ uint32_t sched_tick_index = 0;
 
 struct task* pongo_sched_head;
 
-char pongo_sched_tick() {
+char pongo_sched_tick(void) {
     char rvalue = 0;
     disable_interrupts();
     if (!pongo_sched_head) panic("no tasks to schedule");
@@ -128,7 +128,7 @@ uint32_t socnum = 0x0;
 void (*sep_boot_hook)(void);
 void (*sep_teardown_hook)(void);
 
-__attribute__((noinline)) void pongo_entry_cached()
+__attribute__((noinline)) void pongo_entry_cached(void)
 {
     extern char preemption_over;
     preemption_over = 1;
@@ -136,11 +136,11 @@ __attribute__((noinline)) void pongo_entry_cached()
     // Literally everything depends on this
     dt_init((void*)((uint64_t)gBootArgs->deviceTreeP - gBootArgs->virtBase + gBootArgs->physBase - 0x800000000 + kCacheableView), gBootArgs->deviceTreeLength);
 
-    gIOBase = dt_get_u64_prop_i("arm-io", "ranges", 1);
+    gIOBase = dt_get_u64("/arm-io", "ranges", 1);
 
     map_full_ram(gBootArgs->physBase & 0x7ffffffff, gBootArgs->memSize);
 
-    gDevType = dt_get_prop("arm-io", "device_type", NULL);
+    gDevType = dt_get_prop("/arm-io", "device_type", NULL);
     size_t len = strlen(gDevType) - 3;
     len = len < 8 ? len : 8;
     strncpy(soc_name, gDevType, len);
@@ -154,7 +154,7 @@ __attribute__((noinline)) void pongo_entry_cached()
     else if(strcmp(soc_name, "t8015") == 0) socnum = 0x8015;
     else if(strcmp(soc_name, "s8000") == 0)
     {
-        const char *sgx = dt_get_prop("sgx", "compatible", NULL);
+        const char *sgx = dt_get_prop("/arm-io/sgx", "compatible", NULL);
         if(strlen(sgx) > 4 && strcmp(sgx + 4, "s8003") == 0)
         {
             socnum = 0x8003;
@@ -201,7 +201,7 @@ __attribute__((noinline)) void pongo_entry_cached()
     task_current()->proc = proc_create(NULL, "kernel", PROC_NO_VM);
     task_current()->proc->vm_space = &kernel_vm_space;
 
-    void pongo_main_task();
+    void pongo_main_task(void);
     task_register(&pongo_task, pongo_main_task);
 
     // Set up FIQ timer
@@ -289,13 +289,15 @@ __attribute__((noinline)) void pongo_entry_cached()
         screen_fill_basecolor();
 }
 
+extern uint64_t gM1N1Base;
+
 /*
 
     Name: pongo_entry
     Description: entry point in llktrw
 
 */
-extern void set_exception_stack_core0();
+extern void set_exception_stack_core0(void);
 extern void lowlevel_set_identity(void);
 extern _Noreturn void jump_to_image_extended(void *image, void *args, void *tramp, void *original_image);
 extern uint64_t gPongoSlide;
@@ -314,25 +316,28 @@ _Noreturn void pongo_entry(uint64_t *kernel_args, void *entryp, void (*exit_to_e
     set_exception_stack_core0();
     gFramebuffer = (uint32_t*)gBootArgs->Video.v_baseAddr;
     lowlevel_cleanup();
+    gBootArgs->topOfKernelData = gTopOfKernelData;
 
     // Unused space above kernel static area
     void *boot_tramp = (void*)((gTopOfKernelData + 0x3fffULL) & ~0x3fffULL);
     if(gBootFlag == BOOT_FLAG_RAW || gBootFlag == BOOT_FLAG_M1N1)
     {
+        uint64_t entry;
         // We're in EL1 here, but we might need to go back to EL3
         if((__builtin_arm_rsr64("id_aa64pfr0_el1") & 0xf000) != 0)
         {
             __asm__ volatile("smc 0"); // elevate to EL3
         }
-        uint64_t entryOff = 0x800;
         if(gBootFlag == BOOT_FLAG_RAW)
         {
+            entry = (uint64_t)loader_xfer_recv_data - kCacheableView + 0x800000000;
             boot_tramp = NULL;
-            entryOff = 0;
         }
-        // XXX: We should really replace loader_xfer_recv_data with something dedicated here.
-        void *image = (void*)((uint64_t)loader_xfer_recv_data - kCacheableView + 0x800000000 + entryOff);
-        jump_to_image_extended(image, gBootArgs, boot_tramp, gEntryPoint);
+        else
+        {
+            entry = gM1N1Base + 0x800;
+        }
+        jump_to_image_extended((void*)entry, gBootArgs, boot_tramp, gEntryPoint);
     }
     else
     {

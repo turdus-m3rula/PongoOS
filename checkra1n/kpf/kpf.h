@@ -106,6 +106,12 @@ extern struct kernel_version
     uint32_t darwinMinor;
     uint32_t darwinRevision;
     uint32_t xnuMajor;
+    uint32_t xnuMinor;
+    uint32_t xnuPatch;
+    uint32_t xnuFlags;
+    uint32_t xnuRevision;
+    uint32_t xnuRun;
+    uint16_t machineConfig;
 } gKernelVersion;
 #endif
 

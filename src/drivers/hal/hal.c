@@ -24,7 +24,7 @@
  * SOFTWARE.
  *
  */
-#import <pongo.h>
+#include <pongo.h>
 struct hal_device _gRootDevice = {
     .name = "root"
 };
@@ -137,7 +137,7 @@ void hal_register_platform_driver(struct hal_platform_driver* driver) {
     driver->next = platform_driver_head;
     platform_driver_head = driver;
 }
-const char* hal_platform_name() {
+const char* hal_platform_name(void) {
     if (!gPlatform) panic("hal_platform_name: no gPlatform!");
 
     return gPlatform->bound_platform_driver->name;
@@ -148,7 +148,7 @@ bool hal_get_platform_value(const char* name, void* value, size_t* size) {
     return gPlatform->bound_platform_driver->get_platform_value(name, value, size);
 }
 
-static void hal_init_late() {
+static void hal_init_late(void) {
     extern struct driver drivers[] __asm("section$start$__DATA$__drivers");
     extern struct driver drivers_end[]  __asm("section$end$__DATA$__drivers");
     struct driver* driver = &drivers[0];
@@ -176,7 +176,7 @@ void lsdev_cmd(const char *cmd, char *args)
     recurse_device(gRootDevice, 0, lsdev_cb);
 }
 
-void hal_init() {
+void hal_init(void) {
     gPlatform = NULL;
     gRootDevice = &_gRootDevice;
 

@@ -26,7 +26,7 @@
  */
 #include <pongo.h>
 
-void gpio_main() {
+void gpio_main(void) {
     while(1) {
         iprintf("gpio irq %x\n", task_current()->irq_type);
         task_exit_irq();
@@ -35,12 +35,12 @@ void gpio_main() {
 struct task gpio_task = {.name = "gpio"};
 
 uint64_t gGpioBase;
-void gpio_early_init() {
-    gGpioBase = dt_get_u32_prop("gpio", "reg");
-    gGpioBase += gIOBase;
+void gpio_early_init(void)
+{
+    gGpioBase = gIOBase + dt_get_u64("/arm-io/gpio", "reg", 0);
 }
 
-void gpio_init() {
+void gpio_init(void) {
     /*
     size_t len = 0;
     dt_node_t* buttons = dt_get("buttons");

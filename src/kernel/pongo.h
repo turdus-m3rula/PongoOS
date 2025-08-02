@@ -117,8 +117,8 @@ extern void lock_take(lock* lock); // takes a lock spinning initially but after 
 extern void lock_take_spin(lock* lock); // takes a lock spinning until it acquires it
 extern void lock_release(lock* lock); // releases ownership on a lock
 
-extern void task_yield_asserted();
-extern void _task_yield();
+extern void task_yield_asserted(void);
+extern void _task_yield(void);
 extern uint8_t * loader_xfer_recv_data;
 extern uint32_t loader_xfer_recv_count;
 extern uint64_t gBootTimeTicks;
@@ -186,8 +186,8 @@ typedef enum {
 } vm_protect_t;
 
 #ifdef PONGO_PRIVATE
-#import "vfs.h"
-#import "task.h"
+#include "vfs.h"
+#include "task.h"
 #else
 struct proc;
 struct task;
@@ -210,9 +210,9 @@ extern err_t map_physical_range(struct vm_space* vmspace, uint64_t* va, uint64_t
 extern struct vm_space* task_vm_space(struct task*);
 extern void map_range_map(uint64_t* tt0, uint64_t va, uint64_t pa, uint64_t size, uint64_t sh, uint64_t attridx, bool overwrite, uint64_t paging_info, vm_protect_t prot, bool is_tt1);
 extern err_t vm_space_map_page_physical_prot(struct vm_space* vmspace, uint64_t vaddr, uint64_t physical, vm_protect_t prot);
-extern uint64_t ppage_alloc();
+extern uint64_t ppage_alloc(void);
 extern void ppage_free(uint64_t page);
-extern void* page_alloc();
+extern void* page_alloc(void);
 extern void page_free(void* page);
 extern void* alloc_contig(uint32_t size);
 extern void free_contig(void* base, uint32_t size);
@@ -222,8 +222,8 @@ extern err_t vm_deallocate(struct vm_space* vmspace, uint64_t addr, uint64_t siz
 extern void vm_flush(struct vm_space* fl);
 extern void vm_flush_by_addr(struct vm_space* fl, uint64_t va);
 extern size_t memcpy_trap(void* dest, void* src, size_t size);
-extern void task_critical_enter();
-extern void task_critical_exit();
+extern void task_critical_enter(void);
+extern void task_critical_exit(void);
 extern void task_restart(struct task* task);
 extern boot_args *gBootArgs;
 extern uint64_t gTopOfKernelData;
@@ -342,25 +342,25 @@ extern struct pongo_module_info* pongo_module_create(uint32_t segmentCount);
 #define EXPORT_SYMBOL_P(x) {.name = "_"#x, .value = (void*)&x}
 extern void map_range(uint64_t va, uint64_t pa, uint64_t size, uint64_t sh, uint64_t attridx, bool overwrite);
 _Noreturn void pongo_entry(uint64_t* kernel_args, void* entryp, void (*exit_to_el1_image)(void* boot_args, void* boot_entry_point, void *trampoline));
-int pongo_fiq_handler();
-extern void (*preboot_hook)();
-extern void (*sep_boot_hook)();
-extern void (*sep_teardown_hook)();
-extern void (*rdload_hook)();
+int pongo_fiq_handler(void);
+extern void (*preboot_hook)(void);
+extern void (*sep_boot_hook)(void);
+extern void (*sep_teardown_hook)(void);
+extern void (*rdload_hook)(void);
 extern void vm_flush_by_addr_all_asid(uint64_t va);
-extern void task_register_coop(struct task* task, void (*entry)()); // registers a cooperative task
-extern void task_register_preempt_irq(struct task* task, void (*entry)(), int irq_id); // registers an irq handler
-extern void task_register_irq(struct task* task, void (*entry)(), int irq_id); // registers an irq handler
-extern void task_register(struct task* task, void (*entry)()); // register a preempt task
-extern void task_yield();
-extern void task_wait();
-extern void task_exit();
+extern void task_register_coop(struct task* task, void (*entry)(void)); // registers a cooperative task
+extern void task_register_preempt_irq(struct task* task, void (*entry)(void), int irq_id); // registers an irq handler
+extern void task_register_irq(struct task* task, void (*entry)(void), int irq_id); // registers an irq handler
+extern void task_register(struct task* task, void (*entry)(void)); // register a preempt task
+extern void task_yield(void);
+extern void task_wait(void);
+extern void task_exit(void);
 extern void task_crash(const char* reason, ...);
 extern void task_restart_and_link(struct task* task);
-extern void task_exit_asserted();
+extern void task_exit_asserted(void);
 extern void task_crash_asserted(const char* reason, ...);
-extern struct task* task_create(const char* name, void (*entry)());
-extern struct task* task_create_extended(const char* name, void (*entry)(), int task_type, uint64_t arg);
+extern struct task* task_create(const char* name, void (*entry)(void));
+extern struct task* task_create_extended(const char* name, void (*entry)(void), int task_type, uint64_t arg);
 extern void task_reference(struct task* task);
 extern void task_release(struct task* task);
 extern void event_wait_asserted(struct event* ev);
@@ -380,32 +380,32 @@ extern void* memstr_partial(const void* big, unsigned long blength, const char* 
 
 extern uint64_t scheduler_ticks;
 extern void invalidate_icache(void);
-extern struct task* task_current();
-extern char preemption_should_skip_beat();
+extern struct task* task_current(void);
+extern char preemption_should_skip_beat(void);
 extern void task_switch_irq(struct task* to_task);
-extern void task_exit_irq();
-extern void task_exit_irq_asserted();
+extern void task_exit_irq(void);
+extern void task_exit_irq_asserted(void);
 extern void task_switch(struct task* to_task);
 extern void task_link(struct task* to_task);
 extern void task_unlink(struct task* to_task);
 extern void task_irq_dispatch(uint32_t intr);
-extern void task_yield_asserted();
-extern void task_register_unlinked(struct task* task, void (*entry)());
-extern void task_suspend_self();
+extern void task_yield_asserted(void);
+extern void task_register_unlinked(struct task* task, void (*entry)(void));
+extern void task_suspend_self(void);
 extern _Noreturn __attribute__((format(printf, 1, 2))) void panic(const char* string, ...);
-extern void pmgr_reset();
+extern void pmgr_reset(void);
 extern void spin(uint32_t usec);
 extern void task_set_sched_head(struct task* task);
-extern void enable_interrupts();
-extern void disable_interrupts();
-extern uint64_t get_ticks();
+extern void enable_interrupts(void);
+extern void disable_interrupts(void);
+extern uint64_t get_ticks(void);
 extern void usleep(uint64_t usec);
 extern void sleep(uint32_t sec);
 extern void unmask_interrupt(uint32_t reg);
 extern void mask_interrupt(uint32_t reg);
-extern _Noreturn void wdt_reset();
-extern void wdt_enable();
-extern void wdt_disable();
+extern _Noreturn void wdt_reset(void);
+extern void wdt_enable(void);
+extern void wdt_disable(void);
 extern void command_register(const char* name, const char* desc, void (*cb)(const char* cmd, char* args));
 extern char* command_tokenize(char* str, uint32_t strbufsz);
 extern uint8_t get_el(void);
@@ -419,11 +419,11 @@ extern void register_irq_handler(uint16_t irq_v, struct task* irq_handler);
 extern uint64_t device_clock_by_id(uint32_t id);
 extern uint64_t device_clock_by_name(const char *name);
 extern void clock_gate(uint64_t addr, char val);
-extern void disable_preemption();
-extern void enable_preemption();
+extern void disable_preemption(void);
+extern void enable_preemption(void);
 extern void* alloc_contig(uint32_t size);
 extern uint64_t alloc_phys(uint32_t size);
-extern void task_suspend_self_asserted();
+extern void task_suspend_self_asserted(void);
 extern void command_execute(char* cmd);
 extern void queue_rx_string(char* string);
 extern void command_unregister(const char* name);
@@ -442,14 +442,14 @@ extern uint64_t vatophys_force(uint64_t kvaddr);
 extern volatile uint8_t command_in_progress;
 extern void set_stdout_blocking(bool block);
 extern void fetch_stdoutbuf(char* to, int* len);
-extern void usbloader_init();
-extern void pmgr_init();
-extern void command_init();
-extern void task_init();
-extern void serial_init();
-extern void interrupt_init();
-extern void interrupt_teardown();
-extern void task_irq_teardown();
+extern void usbloader_init(void);
+extern void pmgr_init(void);
+extern void command_init(void);
+extern void task_init(void);
+extern void serial_init(void);
+extern void interrupt_init(void);
+extern void interrupt_teardown(void);
+extern void task_irq_teardown(void);
 extern uint32_t exception_vector[];
 extern void set_vbar_el1(uint64_t vec);
 extern void rebase_pc(uint64_t vec);
@@ -459,7 +459,7 @@ extern uint64_t get_migsts(void);
 extern uint64_t get_mpidr(void);
 extern void set_migsts(uint64_t val);
 extern void enable_mmu_el1(uint64_t ttbr0, uint64_t tcr, uint64_t mair, uint64_t ttbr1);
-extern void disable_mmu_el1();
+extern void disable_mmu_el1(void);
 extern void lowlevel_cleanup(void);
 extern void lowlevel_setup(uint64_t phys_off, uint64_t phys_size);
 extern void map_full_ram(uint64_t phys_off, uint64_t phys_size);

@@ -77,7 +77,7 @@ struct vm_space {
     struct vm_space* parent;
     uint64_t asid;
 };
-extern void vm_init();
+extern void vm_init(void);
 
 struct proc {
     uint32_t refcount;
@@ -116,10 +116,10 @@ struct task { // a task is a thread-like execution environment, executing under 
     uint32_t flags;
     struct task* next;
     struct task* prev;
-    void (*exit_callback)();
+    void (*exit_callback)(void);
     uint32_t refcount;
     int32_t critical_count;
-    void (*fault_catch)();
+    void (*fault_catch)(void);
     struct vm_space* vm_space;
     uint64_t user_stack;
     uint64_t entry_stack;

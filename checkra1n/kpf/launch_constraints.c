@@ -32,6 +32,7 @@
 #include <string.h>
 
 static bool need_launch_constraints_patch = false;
+static bool found_launch_constraints = false;
 
 static bool kpf_launch_constraints_callback(struct xnu_pf_patch *patch, uint32_t *opcode_stream)
 {
@@ -43,7 +44,6 @@ static bool kpf_launch_constraints_callback(struct xnu_pf_patch *patch, uint32_t
         return false;
     }
 
-    static bool found_launch_constraints = false;
     if(found_launch_constraints)
     {
         panic("kpf_launch_constraints: Found twice");
@@ -77,21 +77,37 @@ static void kpf_launch_constraints_patch(xnu_pf_patchset_t *patchset)
 {
     // Disable launch constraints.
     // We just match against a log string, seek to the start of the function, and make it return 0.
-    uint64_t matches[] =
+    uint64_t matches_160[] =
     {
         0x90000000, // adrp x0, ...
         0x91000000, // add x0, x0, ...
         0xf90003f0, // str x{16-31}, [sp]
         0x94000000, // bl IOLog
     };
-    uint64_t masks[] =
+    uint64_t masks_160[] =
     {
         0x9f00001f,
         0xffc003ff,
         0xfffffff0,
         0xfc000000,
     };
-    xnu_pf_maskmatch(patchset, "launch_constraints", matches, masks, sizeof(matches)/sizeof(uint64_t), true, (void*)kpf_launch_constraints_callback);
+    xnu_pf_maskmatch(patchset, "launch_constraints", matches_160, masks_160, sizeof(matches_160)/sizeof(uint64_t), false, (void*)kpf_launch_constraints_callback);
+
+    uint64_t matches_184[] =
+    {
+        0x90000000, // adrp x0, ...
+        0x91000000, // add x0, x0, ...
+        0xa90043f0, // stp x{16-31}, x{16-31}, [sp]
+        0x94000000, // bl IOLog
+    };
+    uint64_t masks_184[] =
+    {
+        0x9f00001f,
+        0xffc003ff,
+        0xffffc3f0,
+        0xfc000000,
+    };
+    xnu_pf_maskmatch(patchset, "launch_constraints", matches_184, masks_184, sizeof(matches_184)/sizeof(uint64_t), false, (void*)kpf_launch_constraints_callback);
 }
 
 static void kpf_launch_constraints_init(struct mach_header_64 *hdr, xnu_pf_range_t *cstring, checkrain_option_t kpf_flags, checkrain_option_t checkra1n_flags)
@@ -118,9 +134,18 @@ static void kpf_launch_constraints_patches(xnu_pf_patchset_t *amfi_text_exec_pat
     }
 }
 
+static void kpf_launch_constraints_finish(struct mach_header_64 *hdr, checkrain_option_t *checkra1n_flags)
+{
+    if(need_launch_constraints_patch && !found_launch_constraints)
+    {
+        panic("Missing patch: launch_constraints");
+    }
+}
+
 kpf_component_t kpf_launch_constraints =
 {
     .init = kpf_launch_constraints_init,
+    .finish = kpf_launch_constraints_finish,
     .patches =
     {
         { "com.apple.driver.AppleMobileFileIntegrity", "__TEXT_EXEC", "__text", XNU_PF_ACCESS_32BIT, kpf_launch_constraints_patches },

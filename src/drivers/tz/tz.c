@@ -30,7 +30,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "pongo.h"
+#include <pongo.h>
 #include "tz.h"
 
 static bool gHaveTZ1 = false;

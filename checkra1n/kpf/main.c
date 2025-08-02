@@ -139,20 +139,70 @@ static void kpf_kernel_version_init(xnu_pf_range_t *text_const_range)
     const char *start = kernelVersionString + strlen(kernelVersionStringMarker);
     char *end = NULL;
     errno = 0;
+
     gKernelVersion.darwinMajor = strtoimax(start, &end, 10);
-    if(errno) panic("Error parsing kernel version");
+    if(errno || *end != '.') panic("Error parsing darwin version");
     start = end+1;
     gKernelVersion.darwinMinor = strtoimax(start, &end, 10);
-    if(errno) panic("Error parsing kernel version");
+    if(errno || *end != '.') panic("Error parsing darwin version");
     start = end+1;
     gKernelVersion.darwinRevision = strtoimax(start, &end, 10);
-    if(errno) panic("Error parsing kernel version");
+    if(errno || *end != ':') panic("Error parsing darwin version");
+
     start = strstr(end, "root:xnu");
     if(start) start = strchr(start + strlen("root:xnu"), '-');
-    if(!start) panic("Error parsing kernel version");
+    if(!start) panic("Error parsing xnu version");
     gKernelVersion.xnuMajor = strtoimax(start+1, &end, 10);
-    if(errno) panic("Error parsing kernel version");
-    printf("Detected Kernel version Darwin: %d.%d.%d xnu: %d\n", gKernelVersion.darwinMajor, gKernelVersion.darwinMinor, gKernelVersion.darwinRevision, gKernelVersion.xnuMajor);
+    if(errno) panic("Error parsing xnu version");
+    if(*end == '.')
+    {
+        start = end+1;
+        gKernelVersion.xnuMinor = strtoimax(start, &end, 10);
+        if(errno || *end != '.') panic("Error parsing xnu version");
+        start = end+1;
+        gKernelVersion.xnuPatch = strtoimax(start, &end, 10);
+        if(errno) panic("Error parsing xnu version");
+        if(*end == '.')
+        {
+            start = end+1;
+            gKernelVersion.xnuFlags = strtoimax(start, &end, 10);
+            if(errno) panic("Error parsing xnu version");
+            if(*end == '.')
+            {
+                start = end+1;
+                gKernelVersion.xnuRevision = strtoimax(start, &end, 10);
+                if(errno) panic("Error parsing xnu version");
+            }
+            else
+            {
+                // If we have only four groups, then we assume "patch" is missing.
+                gKernelVersion.xnuRevision = gKernelVersion.xnuFlags;
+                gKernelVersion.xnuFlags = gKernelVersion.xnuPatch;
+                gKernelVersion.xnuPatch = 0;
+            }
+        }
+    }
+    if(*end != '~') panic("Error parsing xnu version");
+    start = end+1;
+    gKernelVersion.xnuRun = strtoimax(start, &end, 10);
+    if(errno || *end != '/') panic("Error parsing xnu version");
+
+    start = strrchr(end + 1, '_');
+    if(!start) panic("Error parsing machine config");
+    start += 1;
+    // This is ghetto because machineConfig doesn't differentiate between the two A9 flavours or A9X, A10 vs T2,
+    // and a lot of the time not even between A10 and A10X, A8 vs A8X, etc... obviously not consistent across versions either.
+    // But we need something that works in kpf-test, and this is exclusive to DEV_BUILD anyway, so whatever.
+    if  (strcmp(start, "S5L8960X") == 0) gKernelVersion.machineConfig = 0x8960;
+    else if(strcmp(start, "T7000") == 0) gKernelVersion.machineConfig = 0x7000;
+    else if(strcmp(start, "T7001") == 0) gKernelVersion.machineConfig = 0x7001;
+    else if(strcmp(start, "S8000") == 0) gKernelVersion.machineConfig = 0x8000;
+    else if(strcmp(start, "T8010") == 0) gKernelVersion.machineConfig = 0x8010;
+    else if(strcmp(start, "T8011") == 0) gKernelVersion.machineConfig = 0x8011;
+    else if(strcmp(start, "T8015") == 0) gKernelVersion.machineConfig = 0x8015;
+    else                                 panic("Unknown machine config: %s", start);
+
+    printf("Detected Kernel version Darwin: %d.%d.%d xnu: %d.%d.%d.%d.%d~%d machine: %04hx\n", gKernelVersion.darwinMajor, gKernelVersion.darwinMinor, gKernelVersion.darwinRevision, gKernelVersion.xnuMajor, gKernelVersion.xnuMinor, gKernelVersion.xnuPatch, gKernelVersion.xnuFlags, gKernelVersion.xnuRevision, gKernelVersion.xnuRun, gKernelVersion.machineConfig);
 }
 #endif
 
@@ -735,33 +785,6 @@ bool ret0_gadget_callback(struct xnu_pf_patch* patch, uint32_t* opcode_stream)
     return true;
 }
 
-uint32_t *vnode_lookup,
-         *vnode_put,
-         *vfs_context_current;
-
-bool vnode_lookup_callback(struct xnu_pf_patch* patch, uint32_t* opcode_stream)
-{
-    if(vnode_lookup)
-    {
-        DEVLOG("vnode_lookup_callback: already ran, skipping...");
-        return false;
-    }
-    uint32_t *try = &opcode_stream[8]+((opcode_stream[8]>>5)&0xFFF);
-    if ((try[0]&0xFFE0FFFF) != 0xAA0003E0 ||    // MOV x0, Xn
-        (try[1]&0xFC000000) != 0x94000000 ||    // BL _sfree
-        (try[3]&0xFF000000) != 0xB4000000 ||    // CBZ
-        (try[4]&0xFC000000) != 0x94000000 ) {   // BL _vnode_put
-        DEVLOG("Failed match of vnode_lookup code at 0x%llx", kext_rebase_va(xnu_ptr_to_va(opcode_stream)));
-        return false;
-    }
-    puts("KPF: Found vnode_lookup");
-    vfs_context_current = follow_call(&opcode_stream[1]);
-    vnode_lookup = follow_call(&opcode_stream[6]);
-    vnode_put = follow_call(&try[4]);
-    xnu_pf_disable_patch(patch);
-    return true;
-}
-
 void kpf_find_shellcode_funcs(xnu_pf_patchset_t* xnu_text_exec_patchset) {
     // to find this with r2 run:
     // /x 00008192007fbef2:00ffffff00ffffff
@@ -1315,46 +1338,20 @@ void kpf_amfi_kext_patches(xnu_pf_patchset_t* patchset) {
     // 0xfffffff008b0ad5c      210e0054       b.ne 0xfffffff008b0af20
     //
     // r2:
-    // /x 3f680171000000543f6c017101000054:ffffffff1f0000ffffffffff1f0000ff
+    // /x 3f680171000000543f6c017100000054:ffffffff1f0000ffffffffff1e0000ff
     uint64_t iiii_matches[] = {
         0x7101683f, // cmp w1, 0x5a
         0x54000000, // b.eq
         0x71016c3f, // cmp w1, 0x5b
-        0x54000001, // b.ne
+        0x54000000, // b.eq / b.ne
     };
     uint64_t iiii_masks[] = {
         0xffffffff,
         0xff00001f,
         0xffffffff,
-        0xff00001f,
+        0xff00001e,
     };
     xnu_pf_maskmatch(patchset, "amfi_mac_syscall_low", iiii_matches, iiii_masks, sizeof(iiii_matches)/sizeof(uint64_t), false, (void*)kpf_amfi_mac_syscall_low);
-}
-
-void kpf_sandbox_kext_patches(xnu_pf_patchset_t* patchset) {
-    uint64_t matches[] = {
-        0x35000000, // CBNZ
-        0x94000000, // BL _vfs_context_current
-        0xAA0003E0, // MOV Xn, X0
-        0xD1006002, // SUB
-        0x00000000, // MOV X0, Xn || MOV W1, #0
-        0x00000000, // MOV X0, Xn || MOV W1, #0
-        0x94000000, // BL _vnode_lookup
-        0xAA0003E0, // MOV Xn, X0
-        0x35000000  // CBNZ
-    };
-    uint64_t masks[] = {
-        0xFF000000,
-        0xFC000000,
-        0xFFFFFFE0,
-        0xFFFFE01F,
-        0x00000000,
-        0x00000000,
-        0xFC000000,
-        0xFFFFFFE0,
-        0xFF000000
-    };
-    xnu_pf_maskmatch(patchset, "vnode_lookup", matches, masks, sizeof(masks)/sizeof(uint64_t), true, (void*)vnode_lookup_callback);
 }
 
 bool vnop_rootvp_auth_callback(struct xnu_pf_patch *patch, uint32_t *opcode_stream) {
@@ -1519,7 +1516,7 @@ static int kpf_compare_patches(const void *a, const void *b)
 
 static checkrain_option_t kpf_flags, checkra1n_flags;
 
-static void kpf_cmd(const char *cmd, char *args)
+static void kpf_cmd(void)
 {
     static bool kpf_didrun = false;
     if(kpf_didrun)
@@ -1587,7 +1584,6 @@ static void kpf_cmd(const char *cmd, char *args)
     found_vm_fault_enter = false;
     kpf_has_done_mac_mount = false;
     vnode_gaddr = NULL;
-    vfs_context_current = NULL;
     offsetof_p_flags = -1;
 
     struct mach_header_64* hdr = xnu_header();
@@ -1710,6 +1706,7 @@ static void kpf_cmd(const char *cmd, char *args)
     xnu_pf_apply(amfi_text_exec_range, amfi_patchset);
     xnu_pf_patchset_destroy(amfi_patchset);
 
+#if 0
     xnu_pf_patchset_t* sandbox_patchset = xnu_pf_patchset_create(XNU_PF_ACCESS_32BIT);
     struct mach_header_64* sandbox_header = xnu_pf_get_kext_header(hdr, "com.apple.security.sandbox");
     xnu_pf_range_t* sandbox_text_exec_range = xnu_pf_section(sandbox_header, "__TEXT_EXEC", "__text");
@@ -1717,6 +1714,7 @@ static void kpf_cmd(const char *cmd, char *args)
     xnu_pf_emit(sandbox_patchset);
     xnu_pf_apply(sandbox_text_exec_range, sandbox_patchset);
     xnu_pf_patchset_destroy(sandbox_patchset);
+#endif
 
     // TODO
     //struct mach_header_64* accessory_header = xnu_pf_get_kext_header(hdr, "com.apple.iokit.IOAccessoryManager");
@@ -1785,14 +1783,9 @@ static void kpf_cmd(const char *cmd, char *args)
     if (!repatch_ldr_x19_vnode_pathoff) panic("no repatch_ldr_x19_vnode_pathoff");
     if (!has_found_sbops) panic("no sbops?");
     if (!amfi_ret) panic("no amfi_ret?");
-    if (!vnode_lookup) panic("no vnode_lookup?");
-    DEVLOG("Found vnode_lookup: 0x%llx", xnu_rebase_va(xnu_ptr_to_va(vnode_lookup)));
-    if (!vnode_put) panic("no vnode_put?");
-    DEVLOG("Found vnode_put: 0x%llx", xnu_rebase_va(xnu_ptr_to_va(vnode_put)));
     if (offsetof_p_flags == -1) panic("no p_flags?");
     if (!found_vm_fault_enter) panic("no vm_fault_enter");
     if (!found_vm_map_protect) panic("Missing patch: vm_map_protect");
-    if (!vfs_context_current) panic("Missing patch: vfs_context_current");
     if (!rootvp_string_match && !kpf_has_done_mac_mount) panic("Missing patch: mac_mount");
 
     uint32_t delta = (&shellcode_area[1]) - amfi_ret;
@@ -1871,9 +1864,9 @@ static void kpf_cmd(const char *cmd, char *args)
     // Patch shellcode pointers
     repatch_sandbox_shellcode_ptrs[0] = update_execve;
     repatch_sandbox_shellcode_ptrs[1] = xnu_ptr_to_va(vnode_gaddr);
-    repatch_sandbox_shellcode_ptrs[2] = xnu_ptr_to_va(vfs_context_current);
-    repatch_sandbox_shellcode_ptrs[3] = xnu_ptr_to_va(vnode_lookup);
-    repatch_sandbox_shellcode_ptrs[4] = xnu_ptr_to_va(vnode_put);
+    repatch_sandbox_shellcode_ptrs[2] = kpf_vfs__vfs_context_current();
+    repatch_sandbox_shellcode_ptrs[3] = kpf_vfs__vnode_lookup();
+    repatch_sandbox_shellcode_ptrs[4] = kpf_vfs__vnode_put();
 
     uint32_t* repatch_vnode_shellcode = &shellcode_area[4];
     *repatch_vnode_shellcode = repatch_ldr_x19_vnode_pathoff;
@@ -1977,7 +1970,7 @@ void module_entry(void)
     preboot_hook = kpf_cmd;
     command_register("checkra1n_flags", "set flags for checkra1n userland", checkra1n_flags_cmd);
     command_register("kpf_flags", "set flags for kernel patchfinder", kpf_flags_cmd);
-    command_register("kpf", "running checkra1n-kpf without booting (use bootux afterwards)", kpf_cmd);
+    command_register("kpf", "running checkra1n-kpf without booting (use bootux afterwards)", (void*)kpf_cmd);
     command_register("overlay", "loads an overlay disk image", kpf_overlay_cmd);
 }
 const char *module_name = "checkra1n-kpf2-12.0,16.4";

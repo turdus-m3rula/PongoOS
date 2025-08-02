@@ -58,9 +58,7 @@ static void reg_or(struct _reg reg, uint32_t val) {
 }
 
 
-static void USB_DEBUG_PRINT_REGISTERS();
-
-static void USB_DEBUG_PRINT_REGISTERS() {
+static void USB_DEBUG_PRINT_REGISTERS(void) {
     disable_interrupts();
 #define USB_DEBUG_REG_VALUE(reg) USB_DEBUG(USB_DEBUG_STANDARD, #reg " = 0x%x\n", reg_read(reg));
     USB_DEBUG_REG_VALUE(rGOTGCTL);
@@ -281,7 +279,7 @@ static uint8_t ktrw_recv_data[0x1000];
 static uint16_t ktrw_recv_count;
 
 static void
-ktrw_send_done() {
+ktrw_send_done(void) {
     USB_DEBUG(USB_DEBUG_APP, "ktrw_send done");
     if (ktrw_send_in_flight > ktrw_send_count) {
         USB_DEBUG(USB_DEBUG_FATAL, "in_flight %u > %u send_count", ktrw_send_in_flight, ktrw_send_count);
@@ -359,7 +357,7 @@ usb_write(const void *data, size_t size) {
 }
 
 void
-usb_write_commit() {
+usb_write_commit(void) {
     if (ktrw_send_count > 0 && ktrw_send_in_flight == 0) {
         ktrw_send_in_flight = ktrw_send_count;
         USB_DEBUG(USB_DEBUG_APP, "ktrw_send(%.*s)", (int) ktrw_send_in_flight, (char *) ktrw_send_data);
@@ -1236,7 +1234,7 @@ usb_set_address(uint8_t address) {
     reg_write(rDCFG, dcfg);
 }
 __attribute__((used)) static void
-usb_reset() {
+usb_reset(void) {
     USB_DEBUG(USB_DEBUG_FUNC, "Reset");
     ep_in_abort(&ep0_in);
     ep_in_abort(&ep1_in);
@@ -1450,7 +1448,7 @@ usb_out_transfer_dma(uint8_t ep_addr, void *data, uint32_t dma, uint32_t size,
 static volatile bool usb_done = true;
 
 static void
-ep0_in_interrupt() {
+ep0_in_interrupt(void) {
     uint32_t diepint = reg_read(rDIEPINT(0));
     reg_write(rDIEPINT(0), diepint);
     USB_DEBUG(USB_DEBUG_INTR, "DIEPINT(0) %x", diepint);
@@ -1515,7 +1513,7 @@ ep0_in_interrupt() {
 }
 
 static void
-ep0_out_interrupt() {
+ep0_out_interrupt(void) {
     uint32_t doepint = reg_read(rDOEPINT(0));
     reg_write(rDOEPINT(0), doepint);
     bool is_setup = !!(doepint & 0x8008);
@@ -1666,7 +1664,7 @@ ep0_out_interrupt() {
 }
 
 static void
-ep1_in_interrupt() {
+ep1_in_interrupt(void) {
     uint32_t diepint = reg_read(rDIEPINT(1));
     reg_write(rDIEPINT(1), diepint);
     USB_DEBUG(USB_DEBUG_INTR, "DIEPINT(1) %x", diepint);
@@ -1696,7 +1694,7 @@ ep1_in_interrupt() {
 
 
 static void
-ep2_out_interrupt() {
+ep2_out_interrupt(void) {
     uint32_t doepint = reg_read(rDOEPINT(2));
     reg_write(rDOEPINT(2), doepint);
     USB_DEBUG(USB_DEBUG_INTR, "DOEPINT(2) %x", doepint);
@@ -1727,7 +1725,7 @@ ep2_out_interrupt() {
 }
 
 static void
-usb_ep_interrupt() {
+usb_ep_interrupt(void) {
     uint32_t daint = reg_read(rDAINT);
     if (daint != 0) {
         USB_DEBUG(USB_DEBUG_INTR, "[%u] DAINT %x", USB_DEBUG_ITERATION, daint);
@@ -1746,7 +1744,7 @@ usb_ep_interrupt() {
     }
 }
 
-static void usb_reap();
+static void usb_reap(void);
 static struct event usb_done_ev;
 char usb_irq_mode;
 char usb_usbtask_handoff_mode;
@@ -1754,7 +1752,7 @@ uint16_t usb_irq;
 struct task* usbtask_niq;
 
 #define SUPPORTED_GINST 0xc3000
-void usb_handler() {
+void usb_handler(void) {
     uint32_t gintsts = 0;
     while (1) {
         uint32_t val = reg_read(rGINTSTS);
@@ -1779,7 +1777,7 @@ void usb_handler() {
     }
 }
 
-void usb_main_nonirq() {
+void usb_main_nonirq(void) {
     while (1) {
         disable_interrupts();
         usb_handler();
@@ -1791,7 +1789,7 @@ void usb_main_nonirq() {
 }
 
 
-void usb_main() {
+void usb_main(void) {
     while (1) {
         disable_interrupts();
         if (usb_usbtask_handoff_mode && usb_irq_mode) {
@@ -1971,7 +1969,7 @@ void usb_init(void)
     }
     else task_register(&usb_task, usb_main);
     enable_interrupts();
-    command_register("synopsys", "prints a synopsysotg register dump", USB_DEBUG_PRINT_REGISTERS);
+    command_register("synopsys", "prints a synopsysotg register dump", (void*)USB_DEBUG_PRINT_REGISTERS);
 }
 
 static void usb_reap(void)

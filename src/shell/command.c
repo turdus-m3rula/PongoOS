@@ -137,7 +137,7 @@ static inline void put_serial_modifier(const char* str) {
     while (*str) serial_putc(*str++);
 }
 
-void command_main() {
+void command_main(void) {
     while (1) {
         if (!uart_should_drop_rx) {
             fflush(stdout);
@@ -177,7 +177,7 @@ void help(const char * cmd, char* arg) {
     }
     lock_release(&command_lock);
 }
-void command_init() {
+void command_init(void) {
     command_task = task_create("command", command_main);
     command_task->flags |= TASK_RESTART_ON_EXIT;
     command_task->flags &= ~TASK_CAN_EXIT;

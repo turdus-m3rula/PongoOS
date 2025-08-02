@@ -31,7 +31,7 @@
 #define MAX_WANT_PAGES_IN_FREELIST 512
 void* free_list;
 bool is_16k_v = false;
-void* page_alloc() {
+void* page_alloc(void) {
     return phystokv(ppage_alloc());
 }
 void page_free(void* page) {
@@ -526,7 +526,7 @@ err_t vm_space_map_page_physical_prot(struct vm_space* vmspace, uint64_t vaddr, 
     return KERN_SUCCESS;
 }
 uint8_t asid_table[256/8];
-uint64_t asid_alloc() {
+uint64_t asid_alloc(void) {
     disable_interrupts();
     for (uint32_t i=0; i < 256; i++) {
         bool is_alloc = !!(asid_table[i>>3] & (1 << (i&0x7)));
@@ -570,7 +570,7 @@ void vm_flush_by_addr_all_asid(uint64_t va) {
     asm volatile("TLBI VAAE1, %0" : : "r"((va >> 12) & 0xFFFFFFFFFFF));
     asm volatile("DSB SY");
 }
-void vm_init() {
+void vm_init(void) {
     if(kernel_vm_space.vm_space_table) panic("vm_init misuse");
 
     asid_table[0] |= 1; // reserve kernel ASID
@@ -682,7 +682,7 @@ void mark_phys_wired(uint64_t pa, uint64_t size) {
     }
     enable_interrupts();
 }
-uint64_t ppage_alloc() {
+uint64_t ppage_alloc(void) {
     uint64_t rv = 0;
     disable_interrupts();
     if (!ppage_list) {
@@ -779,7 +779,7 @@ void phys_dereference(uint64_t pa, uint64_t size) {
     enable_interrupts();
 }
 
-void alloc_init() {
+void alloc_init(void) {
     if (ppage_list) {
         return;
     }

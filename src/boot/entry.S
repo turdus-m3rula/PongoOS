@@ -1,7 +1,7 @@
 /*
  * pongoOS - https://checkra.in
  *
- * Copyright (C) 2019-2023 checkra1n team
+ * Copyright (C) 2019-2025 checkra1n team
  *
  * This file is part of pongoOS.
  *
@@ -39,9 +39,9 @@ start:
     // Since we wanna be at the very start of SRAM, we don't need to check the direction of copying
     .loh AdrpAdd Lloh0, Lloh1
 Lloh0:
-    adrp x6, section$end$__DATA$__pongo_exports@PAGE
+    adrp x6, section$start$__DATA$__zerofill@PAGE
 Lloh1:
-    add x6, x6, section$end$__DATA$__pongo_exports@PAGEOFF
+    add x6, x6, section$start$__DATA$__zerofill@PAGEOFF
 copyloop:
     ldp x7, x8, [x4], 0x10
     stp x7, x8, [x5], 0x10
@@ -60,9 +60,9 @@ L_relocated:
     .loh AdrpAdd Lloh2, Lloh3
     .loh AdrpAdd Lloh4, Lloh5
 Lloh2:
-    adrp x2, section$start$__DATA$__common@PAGE
+    adrp x2, section$start$__DATA$__zerofill@PAGE
 Lloh3:
-    add x2, x2, section$start$__DATA$__common@PAGEOFF
+    add x2, x2, section$start$__DATA$__zerofill@PAGEOFF
 Lloh4:
     adrp x3, segment$end$__DATA@PAGE
 Lloh5:

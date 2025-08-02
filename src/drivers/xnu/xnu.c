@@ -454,10 +454,12 @@ xnu_pf_range_t* xnu_pf_all_x(struct mach_header_64* header) {
 }
 xnu_pf_patchset_t* xnu_pf_patchset_create(uint8_t pf_accesstype) {
     xnu_pf_patchset_t* r = malloc(sizeof(xnu_pf_patchset_t));
-    r->patch_head = NULL;
-    r->jit_matcher = NULL;
-    r->accesstype = pf_accesstype;
-    r->is_required = true;
+    if(r)
+    {
+        bzero(r, sizeof(xnu_pf_patchset_t));
+        r->accesstype = pf_accesstype;
+        r->is_required = true;
+    }
     return r;
 }
 struct xnu_pf_maskmatch {
@@ -1127,7 +1129,6 @@ void xnu_boot(void)
     {
         panic("Cannot boot XNU with TZ0 unlocked");
     }*/
-    gBootArgs->topOfKernelData = gTopOfKernelData;
 }
 
 void xnu_init(void)

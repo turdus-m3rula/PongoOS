@@ -36,7 +36,7 @@
 static bool need_convert_port_to_map_patch = false;
 static bool found_convert_port_to_map = false;
 
-static bool kpf_convert_port_to_map_callback(struct xnu_pf_patch *patch, uint32_t *opcode_stream)
+static bool kpf_convert_port_to_map_callback(struct xnu_pf_patch *patch, uint32_t *patchpoint)
 {
     // Only once
     if(found_convert_port_to_map)
@@ -45,7 +45,6 @@ static bool kpf_convert_port_to_map_callback(struct xnu_pf_patch *patch, uint32_
     }
     found_convert_port_to_map = true;
 
-    uint32_t *patchpoint = opcode_stream + 7;
     uint32_t op = *patchpoint;
     if(op & 1) // is b.ne
     {
@@ -66,8 +65,13 @@ static bool kpf_convert_port_to_map_callback(struct xnu_pf_patch *patch, uint32_
                              (patchpoint[1] & 0xffffe0ff) == 0x52800001 &&  // movz w1, {0x0-0x100 with granularity 8}
                              (patchpoint[2] & 0xfc000000) == 0x94000000;    // bl zone_require
 #ifdef DEV_BUILD
-    // This is a whole mess: 15.0 beta 2 through 15.3 final, and then again 16.4 beta 1 through 16.x latest.
-    if(have_zone_require != ((gKernelVersion.xnuMajor > 7938 && gKernelVersion.xnuMajor < 8020) || (gKernelVersion.xnuMajor > 8792 && gKernelVersion.xnuMajor < 10002)))
+    // This is a whole mess: 15.0 beta 2 through 15.3 final, and then again 16.4 beta 1 through 16.x latest...
+    // ...AND specifically for tvOS/audioOS 18.4 beta 1, but ONLY for A8... absolute psychosis.
+    if(have_zone_require != (
+        (gKernelVersion.xnuMajor > 7938 && gKernelVersion.xnuMajor < 8020) ||
+        (gKernelVersion.xnuMajor > 8792 && gKernelVersion.xnuMajor < 10002) ||
+        (gKernelVersion.xnuMajor == 11417 && gKernelVersion.xnuMinor == 100 && gKernelVersion.xnuPatch == 533 && gKernelVersion.xnuFlags == 503 && gKernelVersion.xnuRevision == 3 && gKernelVersion.machineConfig == 0x7000)
+    ))
     {
         panic_at(patchpoint, "kpf_convert_port_to_map: zone_require doesn't match expected XNU version");
     }
@@ -79,6 +83,21 @@ static bool kpf_convert_port_to_map_callback(struct xnu_pf_patch *patch, uint32_
 
     puts("KPF: Found convert_port_to_map");
     return true;
+}
+
+static bool kpf_convert_port_to_map_callback_old(struct xnu_pf_patch *patch, uint32_t *opcode_stream)
+{
+    return kpf_convert_port_to_map_callback(patch, opcode_stream + 7);
+}
+
+static bool kpf_convert_port_to_map_callback_new_short(struct xnu_pf_patch *patch, uint32_t *opcode_stream)
+{
+    return kpf_convert_port_to_map_callback(patch, opcode_stream + 8);
+}
+
+static bool kpf_convert_port_to_map_callback_new_long(struct xnu_pf_patch *patch, uint32_t *opcode_stream)
+{
+    return kpf_convert_port_to_map_callback(patch, opcode_stream + 9);
 }
 
 static void kpf_convert_port_to_map_patch(xnu_pf_patchset_t *xnu_text_exec_patchset)
@@ -159,13 +178,13 @@ static void kpf_convert_port_to_map_patch(xnu_pf_patchset_t *xnu_text_exec_patch
         0xffe0fc1f,
         0xff00001e,
     };
-    xnu_pf_maskmatch(xnu_text_exec_patchset, "convert_port_to_map", matches, masks, sizeof(matches)/sizeof(uint64_t), false, (void*)kpf_convert_port_to_map_callback);
+    xnu_pf_maskmatch(xnu_text_exec_patchset, "convert_port_to_map", matches, masks, sizeof(matches)/sizeof(uint64_t), false, (void*)kpf_convert_port_to_map_callback_old);
 
     matches[4] = NOP;
     masks[4] = 0xffffffff;
     matches[5] = 0x58000000; // ldr (literal)
     masks[5] = 0xff000000;
-    xnu_pf_maskmatch(xnu_text_exec_patchset, "convert_port_to_map", matches, masks, sizeof(matches)/sizeof(uint64_t), false, (void*)kpf_convert_port_to_map_callback);
+    xnu_pf_maskmatch(xnu_text_exec_patchset, "convert_port_to_map", matches, masks, sizeof(matches)/sizeof(uint64_t), false, (void*)kpf_convert_port_to_map_callback_old);
 
     // iOS 15.5 changes the adrp+ldr to an adrp+add:
     //
@@ -179,7 +198,7 @@ static void kpf_convert_port_to_map_patch(xnu_pf_patchset_t *xnu_text_exec_patch
     // 0xfffffff0071d11cc      c0000054       b.eq 0xfffffff0071d11e4
     //
     // /x 0000403900000034000040f9002040f900000090000000911f0000eb00000054:0000c0ff000000ff00c0ffff00f8ffff0000009f0000c0ff1ffce0ff1e0000ff
-    uint64_t matches_variant[] =
+    uint64_t matches_155[] =
     {
         0x39400000, // ldrb wN, [xM, ...]
         0x34000000, // cbz
@@ -190,7 +209,7 @@ static void kpf_convert_port_to_map_patch(xnu_pf_patchset_t *xnu_text_exec_patch
         0xeb00001f, // cmp
         0x54000000, // b.ne / b.eq
     };
-    uint64_t masks_variant[] =
+    uint64_t masks_155[] =
     {
         0xffc00000,
         0xff000000,
@@ -201,7 +220,88 @@ static void kpf_convert_port_to_map_patch(xnu_pf_patchset_t *xnu_text_exec_patch
         0xffe0fc1f,
         0xff00001e,
     };
-    xnu_pf_maskmatch(xnu_text_exec_patchset, "convert_port_to_map", matches_variant, masks_variant, sizeof(matches_variant)/sizeof(uint64_t), false, (void*)kpf_convert_port_to_map_callback);
+    xnu_pf_maskmatch(xnu_text_exec_patchset, "convert_port_to_map", matches_155, masks_155, sizeof(matches_155)/sizeof(uint64_t), false, (void*)kpf_convert_port_to_map_callback_old);
+
+    // iOS 18.4 changed this yet again to either this:
+    //
+    // 0xfffffff0071d57fc      08504039       ldrb w8, [x0, 0x14]
+    // 0xfffffff0071d5800      1f050071       cmp w8, 1
+    // 0xfffffff0071d5804      01feff54       b.ne 0xfffffff0071d57c4
+    // 0xfffffff0071d5808      141440f9       ldr x20, [x0, 0x28]
+    // 0xfffffff0071d580c      822240f9       ldr x2, [x20, 0x40]
+    // 0xfffffff0071d5810      e83b0090       adrp x8, 0xfffffff007951000
+    // 0xfffffff0071d5814      08e10091       add x8, x8, 0x38
+    // 0xfffffff0071d5818      5f0008eb       cmp x2, x8
+    // 0xfffffff0071d581c      40020054       b.eq 0xfffffff0071d5864
+    //
+    // Or this:
+    //
+    // 0xfffffff00723372c      08504039       ldrb w8, [x0, 0x14]
+    // 0xfffffff007233730      1f050071       cmp w8, 1
+    // 0xfffffff007233734      01feff54       b.ne 0xfffffff0072336f4
+    // 0xfffffff007233738      081440f9       ldr x8, [x0, 0x28]
+    // 0xfffffff00723373c      f40308aa       mov x20, x8
+    // 0xfffffff007233740      082140f9       ldr x8, [x8, 0x40]
+    // 0xfffffff007233744      893c00d0       adrp x9, 0xfffffff0079c5000
+    // 0xfffffff007233748      29e10191       add x9, x9, 0x78
+    // 0xfffffff00723374c      1f0109eb       cmp x8, x9
+    // 0xfffffff007233750      c0000054       b.eq 0xfffffff007233768
+    //
+    // /x 000040391f04007101000054000040f9002040f900000090000000911f0000eb00000054:0000c0ff1ffcffff1f0000ff00c0ffff00f8ffff0000009f0000c0ff1ffce0ff1e0000ff
+    // /x 000040391f04007101000054000040f9f00300aa002040f900000090000000911f0000eb00000054:0000c0ff1ffcffff1f0000ff00c0fffff0fff0ff00f8ffff0000009f0000c0ff1ffce0ff1e0000ff
+    uint64_t matches_184[] =
+    {
+        0x39400000, // ldrb wN, [xM, ...]
+        0x7100041f, // cmp wN, 1
+        0x54000001, // b.ne
+        0xf9400000, // ldr xN, [xM, {0x0-0x78}]
+        0xf9402000, // ldr xN, [xM, {0x40|0x48}]
+        0x90000000, // adrp
+        0x91000000, // add
+        0xeb00001f, // cmp
+        0x54000000, // b.ne / b.eq
+    };
+    uint64_t masks_184[] =
+    {
+        0xffc00000,
+        0xfffffc1f,
+        0xff00001f,
+        0xffffc000,
+        0xfffff800,
+        0x9f000000,
+        0xffc00000,
+        0xffe0fc1f,
+        0xff00001e,
+    };
+    xnu_pf_maskmatch(xnu_text_exec_patchset, "convert_port_to_map", matches_184, masks_184, sizeof(matches_184)/sizeof(uint64_t), false, (void*)kpf_convert_port_to_map_callback_new_short);
+
+    uint64_t matches_184_variant[] =
+    {
+        0x39400000, // ldrb wN, [xM, ...]
+        0x7100041f, // cmp wN, 1
+        0x54000001, // b.ne
+        0xf9400000, // ldr xN, [xM, {0x0-0x78}]
+        0xaa0003f0, // mov x{16-31}, x{0-15}
+        0xf9402000, // ldr xN, [xM, {0x40|0x48}]
+        0x90000000, // adrp
+        0x91000000, // add
+        0xeb00001f, // cmp
+        0x54000000, // b.ne / b.eq
+    };
+    uint64_t masks_184_variant[] =
+    {
+        0xffc00000,
+        0xfffffc1f,
+        0xff00001f,
+        0xffffc000,
+        0xfff0fff0,
+        0xfffff800,
+        0x9f000000,
+        0xffc00000,
+        0xffe0fc1f,
+        0xff00001e,
+    };
+    xnu_pf_maskmatch(xnu_text_exec_patchset, "convert_port_to_map", matches_184_variant, masks_184_variant, sizeof(matches_184_variant)/sizeof(uint64_t), false, (void*)kpf_convert_port_to_map_callback_new_long);
 }
 
 static bool found_task_conversion_eval_ldr = false;

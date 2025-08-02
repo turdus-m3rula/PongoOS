@@ -82,7 +82,7 @@ static bool kpf_nvram_inline_callback(struct xnu_pf_patch *patch, uint32_t *opco
     return true;
 }
 
-static bool kpf_nvram_table_callback(struct xnu_pf_patch *patch, uint32_t *opcode_stream)
+static bool kpf_nvram_table_common_callback(struct xnu_pf_patch *patch, uint32_t *opcode_stream, uint32_t *ldr)
 {
     if(nvram_patchpoint || nvram_inline_patch)
     {
@@ -91,12 +91,9 @@ static bool kpf_nvram_table_callback(struct xnu_pf_patch *patch, uint32_t *opcod
 
     // Sanity checks
     uint32_t reg = opcode_stream[0] & 0x1f; // adrp
-    if
-    (
-        ( opcode_stream[1]       & 0x3ff) != (reg | (reg << 5)) || // add src and dst
-        ((opcode_stream[7] >> 5) &  0x1f) !=  reg               || // ldr src
-        ((opcode_stream[9] >> 5) &  0x1f) !=  reg                  // ldr src
-    )
+    if((opcode_stream[1] & 0x3ff) != (reg | (reg << 5))) // add src and dst
+    // These are no longer true:
+    // ((opcode_stream[7] >> 5) & 0x1f) != reg || ((opcode_stream[9] >> 5) & 0x1f) != reg
     {
         return false;
     }
@@ -107,7 +104,7 @@ static bool kpf_nvram_table_callback(struct xnu_pf_patch *patch, uint32_t *opcod
     }
     nvram_inline_patch = true;
 
-    uint32_t *tbnz = find_next_insn(opcode_stream + 10, 10, 0x37100000 | (opcode_stream[9] & 0x1f), 0xfff8001f); // tbnz wM, 2, 0xfffffff0077ae070
+    uint32_t *tbnz = find_next_insn(ldr + 1, 10, 0x37100000 | (ldr[0] & 0x1f), 0xfff8001f); // tbnz wM, 2, 0xfffffff0077ae070
     if(!tbnz)
     {
         panic_at(opcode_stream, "kpf_nvram_unlock: Failed to find tbnz");
@@ -119,6 +116,16 @@ static bool kpf_nvram_table_callback(struct xnu_pf_patch *patch, uint32_t *opcod
     return true;
 }
 
+static bool kpf_nvram_table_callback(struct xnu_pf_patch *patch, uint32_t *opcode_stream)
+{
+    return kpf_nvram_table_common_callback(patch, opcode_stream, opcode_stream + 9);
+}
+
+static bool kpf_nvram_table_dumb_callback(struct xnu_pf_patch *patch, uint32_t *opcode_stream)
+{
+    return kpf_nvram_table_common_callback(patch, opcode_stream, opcode_stream + 13);
+}
+
 static void kpf_nvram_patches(xnu_pf_patchset_t *xnu_text_exec_patchset)
 {
     // Find IODTNVRAM::getOFVariablePerm().
@@ -127,37 +134,37 @@ static void kpf_nvram_patches(xnu_pf_patchset_t *xnu_text_exec_patchset)
 
     // iOS 13 and below:
     // /x 008c41f8000000b5000c40b9:00fcffff000000ff1ffcffff
-    uint64_t matches1[] =
+    uint64_t matches_13[] =
     {
         0xf8418c00, // ldr x*, [x*, 0x18]!
         0xb5000000, // cbnz x*, 0x...
         0xb9400c00, // ldr w0, [x*, 0xc]
     };
-    uint64_t masks1[] =
+    uint64_t masks_13[] =
     {
         0xfffffc00,
         0xff000000,
         0xfffffc1f,
     };
-    xnu_pf_maskmatch(xnu_text_exec_patchset, "nvram_unlock", matches1, masks1, sizeof(matches1)/sizeof(uint64_t), false, (void*)kpf_nvram_callback);
+    xnu_pf_maskmatch(xnu_text_exec_patchset, "nvram_unlock", matches_13, masks_13, sizeof(matches_13)/sizeof(uint64_t), false, (void*)kpf_nvram_callback);
 
     // iOS 14.0 and 14.1:
     // /x 008c41f8000000b5000009aa000c40b9:00fcffff000000ff00fcffff1ffcffff
-    uint64_t matches2[] =
+    uint64_t matches_140[] =
     {
         0xf8418c00, // ldr x*, [x*, 0x18]!
         0xb5000000, // cbnz x*, 0x...
         0xaa090000, // mov x*, x*
         0xb9400c00, // ldr w0, [x*, 0xc]
     };
-    uint64_t masks2[] =
+    uint64_t masks_140[] =
     {
         0xfffffc00,
         0xff000000,
         0xfffffc00,
         0xfffffc1f,
     };
-    xnu_pf_maskmatch(xnu_text_exec_patchset, "nvram_unlock", matches2, masks2, sizeof(matches2)/sizeof(uint64_t), false, (void*)kpf_nvram_callback);
+    xnu_pf_maskmatch(xnu_text_exec_patchset, "nvram_unlock", matches_140, masks_140, sizeof(matches_140)/sizeof(uint64_t), false, (void*)kpf_nvram_callback);
 
     // In iOS 14.2, IODTNVRAM saw a complete refactor. The virtual methods for
     // variable type/permission now just return 0, and there are dedicated
@@ -198,7 +205,7 @@ static void kpf_nvram_patches(xnu_pf_patchset_t *xnu_text_exec_patchset)
     // The above code checks for the "boot-nonce" part of "com.apple.System.boot-nonce".
     // We find that bit specifically, then seek backwards to the start of the
     // function and just patch it to return true unconditionally.
-    uint64_t matches3[] =
+    uint64_t matches_142[] =
     {
         0x39404400, 0x7101881f, 0x54000001, // b
         0x39404800, 0x7101bc1f, 0x54000001, // o
@@ -211,7 +218,7 @@ static void kpf_nvram_patches(xnu_pf_patchset_t *xnu_text_exec_patchset)
         0x39406400, 0x71018c1f, 0x54000001, // c
         0x39406800, 0x7101941f, 0x54000001, // e
     };
-    uint64_t masks3[] =
+    uint64_t masks_142[] =
     {
         0xfffffc00, 0xfffffc1f, 0xff00001f,
         0xfffffc00, 0xfffffc1f, 0xff00001f,
@@ -224,7 +231,7 @@ static void kpf_nvram_patches(xnu_pf_patchset_t *xnu_text_exec_patchset)
         0xfffffc00, 0xfffffc1f, 0xff00001f,
         0xfffffc00, 0xfffffc1f, 0xff00001f,
     };
-    xnu_pf_maskmatch(xnu_text_exec_patchset, "nvram_unlock", matches3, masks3, sizeof(matches3)/sizeof(uint64_t), false, (void*)kpf_nvram_inline_callback);
+    xnu_pf_maskmatch(xnu_text_exec_patchset, "nvram_unlock", matches_142, masks_142, sizeof(matches_142)/sizeof(uint64_t), false, (void*)kpf_nvram_inline_callback);
 
     // And iOS 16.4 must've seen big compiler changes or something, because now it's
     // no longer inlined, and it's once more just a table that is iterated over.
@@ -242,7 +249,7 @@ static void kpf_nvram_patches(xnu_pf_patchset_t *xnu_text_exec_patchset)
     //
     // Shortly afterwards, there is a "tbnz w26, 2", which checks for the kernel-only bit. We just get rid of that.
     // /x 10000090100200910000009000000091e10310aa0000009460000034000c40f880ffffb5100640f9:1000009f1002c0ff1f00009fff03c0fffffff0ff000000fcffffffff1f0ce0ffffffffff10feffff
-    uint64_t matches4[] =
+    uint64_t matches_164[] =
     {
         0x90000010, // adrp xN, 0x...
         0x91000210, // add xN, xN, 0x...
@@ -255,7 +262,7 @@ static void kpf_nvram_patches(xnu_pf_patchset_t *xnu_text_exec_patchset)
         0xb5ffff80, // cbnz x0, .-16
         0xf9400610, // ldr x{16-31}, [xN, 8]
     };
-    uint64_t masks4[] =
+    uint64_t masks_164[] =
     {
         0x9f000010,
         0xffc00210,
@@ -268,7 +275,61 @@ static void kpf_nvram_patches(xnu_pf_patchset_t *xnu_text_exec_patchset)
         0xffffffff,
         0xfffffe10,
     };
-    xnu_pf_maskmatch(xnu_text_exec_patchset, "nvram_unlock", matches4, masks4, sizeof(matches4)/sizeof(uint64_t), false, (void*)kpf_nvram_table_callback);
+    xnu_pf_maskmatch(xnu_text_exec_patchset, "nvram_unlock", matches_164, masks_164, sizeof(matches_164)/sizeof(uint64_t), false, (void*)kpf_nvram_table_callback);
+
+    // And I guess iOS 18.4 saw a regression in LLVM because the code is basically the same, the codegen is just significantly worse:
+    //
+    // 0xfffffff0078a92e0      94c6fff0       adrp x20, 0xfffffff00717c000
+    // 0xfffffff0078a92e4      94221591       add x20, x20, 0x548
+    // 0xfffffff0078a92e8      80bfffd0       adrp x0, 0xfffffff00709b000
+    // 0xfffffff0078a92ec      00e80691       add x0, x0, 0x1ba
+    // 0xfffffff0078a92f0      e10316aa       mov x1, x22
+    // 0xfffffff0078a92f4      e63eea97       bl sym._strcmp
+    // 0xfffffff0078a92f8      c0000034       cbz w0, 0xfffffff0078a9310
+    // 0xfffffff0078a92fc      88620091       add x8, x20, 0x18
+    // 0xfffffff0078a9300      800e40f9       ldr x0, [x20, 0x18]
+    // 0xfffffff0078a9304      f40308aa       mov x20, x8
+    // 0xfffffff0078a9308      40ffffb5       cbnz x0, 0xfffffff0078a92f0
+    // 0xfffffff0078a930c      02000014       b 0xfffffff0078a9314
+    // 0xfffffff0078a9310      e80314aa       mov x8, x20
+    // 0xfffffff0078a9314      180540f9       ldr x24, [x8, 8]
+    //
+    // /x 10000090100200910000009000000091e10310aa00000094c000003400020091000240f9f00300aa40ffffb502000014e00310aa100440f9:1000009f1002c0ff1f00009fff03c0fffffff0ff000000fcffffffff1002c0ff1f02c0fff0fff0fffffffffffffffffff0fff0ff10feffff
+    uint64_t matches_184[] =
+    {
+        0x90000010, // adrp xN, 0x...
+        0x91000210, // add xN, xN, 0x...
+        0x90000000, // adrp x0, 0x...
+        0x91000000, // add x0, x0, 0x...
+        0xaa1003e1, // mov x1, x{16-31}
+        0x94000000, // bl sym._strcmp
+        0x340000c0, // cbz w0, .+24
+        0x91000200, // add x{0-15}, x{16-31}, ...
+        0xf9400200, // ldr x0, [x{16-31, ...]
+        0xaa0003f0, // mov x{16-31}, x{0-15}
+        0xb5ffff40, // cbnz x0, .-24
+        0x14000002, // b .+8
+        0xaa1003e0, // mov x{0-15}, x{16-31}
+        0xf9400410, // ldr x{16-31}, [xN, 8]
+    };
+    uint64_t masks_184[] =
+    {
+        0x9f000010,
+        0xffc00210,
+        0x9f00001f,
+        0xffc003ff,
+        0xfff0ffff,
+        0xfc000000,
+        0xffffffff,
+        0xffc00210,
+        0xffc0021f,
+        0xfff0fff0,
+        0xffffffff,
+        0xffffffff,
+        0xfff0fff0,
+        0xfffffe10,
+    };
+    xnu_pf_maskmatch(xnu_text_exec_patchset, "nvram_unlock", matches_184, masks_184, sizeof(matches_184)/sizeof(uint64_t), false, (void*)kpf_nvram_table_dumb_callback);
 }
 
 static void kpf_nvram_finish(struct mach_header_64 *hdr, checkrain_option_t *checkra1n_flags)

@@ -245,13 +245,13 @@ size_t memcpy_trap(void* dest, void* src, size_t size) {
 
     if (ID_MMFR3_EL1 & 0xF0000) // PAN exists!
     {
-        extern volatile void pan_off();
+        extern volatile void pan_off(void);
         pan_off();
     }
     size_t retn = copy_trap_internal(dest, src, size);
     if (ID_MMFR3_EL1 & 0xF0000) // PAN exists!
     {
-        extern volatile void pan_on();
+        extern volatile void pan_on(void);
         pan_on();
     }
 
@@ -263,20 +263,20 @@ size_t memcpy_trap(void* dest, void* src, size_t size) {
 extern _Noreturn void panic_new_fp(const char* string, ...);
 
 uint64_t dis_int_count = 1;
-void _enable_interrupts();
-void enable_interrupts() {
+void _enable_interrupts(void);
+void enable_interrupts(void) {
     if (!dis_int_count) panic("irq over-enable");
     dis_int_count--;
     if (!dis_int_count) {
         _enable_interrupts();
     }
 }
-void enable_interrupts_asserted() {
+void enable_interrupts_asserted(void) {
     if (!dis_int_count) panic("irq over-enable");
     dis_int_count--;
 }
-void _disable_interrupts();
-void disable_interrupts() {
+void _disable_interrupts(void);
+void disable_interrupts(void) {
     _disable_interrupts();
     dis_int_count++;
     if (!dis_int_count) panic("irq over-disable");
@@ -407,22 +407,22 @@ int sync_exc_el0(uint64_t* state) {
     dis_int_count = 0;
     return sync_exc(state);
 }
-uint32_t interrupt_vector() {
+uint32_t interrupt_vector(void) {
     return (*(volatile uint32_t *)(gInterruptBase + 0x2004));
 }
 uint64_t interruptCount = 0, fiqCount = 0;
 uint32_t do_preempt = 1;
-void disable_preemption() {
+void disable_preemption(void) {
     disable_interrupts();
     do_preempt++;
     enable_interrupts();
 }
-void enable_preemption() {
+void enable_preemption(void) {
     disable_interrupts();
     do_preempt--;
     enable_interrupts();
 }
-int irq_exc() {
+int irq_exc(void) {
     timer_disable();
     dis_int_count = 1;
     is_in_exception = 1;
@@ -449,7 +449,7 @@ int serror_exc(uint64_t* state) {
     is_in_exception = 0;
     return 0;
 }
-int _fiq_exc() {
+int _fiq_exc(void) {
     is_in_exception = 1;
     fiqCount++;
     dis_int_count = 1;
@@ -461,17 +461,17 @@ int _fiq_exc() {
     return ret_val;
 }
 extern uint64_t preemption_counter;
-int fiq_exc() {
+int fiq_exc(void) {
     int fiq_r = _fiq_exc();
     if (fiq_r) {
         preemption_counter++;
     }
     return fiq_r;
 }
-void fiq_sp1() {
+void fiq_sp1(void) {
     panic("got FIQ in EL1h SP1?!");
 }
-void irq_sp1() {
+void irq_sp1(void) {
     panic("got FIQ in EL1h SP1?!");
 }
 void spin(uint32_t usec)
@@ -535,7 +535,7 @@ void mask_interrupt(uint32_t reg) {
 #define WDT_SYS_RST (*(volatile uint32_t*)(gWDTBase + 0x14))
 #define WDT_SYS_CTL (*(volatile uint32_t*)(gWDTBase + 0x1c))
 
-void wdt_reset()
+void wdt_reset(void)
 {
     if(!gWDTBase)
     {
@@ -551,7 +551,7 @@ void wdt_reset()
     }
     panic("wdt reset");
 }
-void wdt_enable()
+void wdt_enable(void)
 {
     // TODO: We should probably change this func signature to include a timeout, if we actually plan to use it?
     return;
@@ -564,7 +564,7 @@ void wdt_enable()
     *(volatile uint32_t*)(gWDTBase + 0x0) = 0;
 #endif
 }
-void wdt_disable()
+void wdt_disable(void)
 {
     if (!gWDTBase) return;
     WDT_CHIP_CTL = 0x0; // Disable WDT
@@ -608,7 +608,7 @@ static pmgr_reg_t *gPMGRreg = NULL;
 static pmgr_map_t *gPMGRmap = NULL;
 static pmgr_dev_t *gPMGRdev = NULL;
 
-void pmgr_init()
+void pmgr_init(void)
 {
     dt_node_t *pmgr = dt_get("/arm-io/pmgr");
     gPMGRreg = dt_node_prop(pmgr, "reg",     &gPMGRreglen);
@@ -618,20 +618,21 @@ void pmgr_init()
     gPMGRmaplen /= sizeof(*gPMGRmap);
     gPMGRdevlen /= sizeof(*gPMGRdev);
     gPMGRBase = gIOBase + gPMGRreg[0].addr;
-    gWDTBase  = gIOBase + dt_get_u64_prop("wdt", "reg");
-    command_register("reset", "resets the device", wdt_reset);
+    gWDTBase  = gIOBase + dt_get_u64("/arm-io/wdt", "reg", 0);
+    command_register("reset", "resets the device", (void*)wdt_reset);
     command_register("crash", "branches to an invalid address", (void*)0x41414141);
 }
-void interrupt_init() {
-    gInterruptBase = dt_get_u32_prop("aic", "reg");
-    gInterruptBase += gIOBase;
-
-    gAICVersion = dt_get_u32_prop("aic", "aic-version");
+void interrupt_init(void)
+{
+    dt_node_t *aic = dt_get("/arm-io/aic");
+    gInterruptBase = gIOBase + dt_node_u64(aic, "reg", 0);
+    gAICVersion = dt_node_u32(aic, "aic-version", 0);
 
     interrupt_or_config(0xE0000000);
     interrupt_or_config(1); // enable interrupt
 }
-void interrupt_teardown() {
+void interrupt_teardown(void)
+{
     wdt_disable();
     task_irq_teardown();
 }

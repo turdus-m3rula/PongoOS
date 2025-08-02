@@ -29,7 +29,7 @@
 
 char uart_queue[64];
 uint8_t uart_queue_idx;
-void uart_flush() {
+void uart_flush(void) {
     if (!uart_queue_idx) return;
     int local_queue_idx = 0;
     while (rUTRSTAT0 & 0x04)
@@ -45,14 +45,14 @@ void uart_flush() {
     }
     uart_queue_idx -= local_queue_idx;
 }
-void uart_force_flush() {
+void uart_force_flush(void) {
     for (int i = 0; i < uart_queue_idx; i++) {
         while (!(rUTRSTAT0 & 0x04)) {}
         rUTXH0 = (unsigned)(uart_queue[i]);
     }
     uart_queue_idx = 0;
 }
-void uart_update_tx_irq() {
+void uart_update_tx_irq(void) {
     return;
     if (!uart_queue_idx)
         rUCON0 = 0x5885;
@@ -61,7 +61,7 @@ void uart_update_tx_irq() {
 }
 uint32_t uart_should_drop_rx;
 extern void queue_rx_char(char inch);
-void uart_main() {
+void uart_main(void) {
     while(1) {
         disable_interrupts();
         uint32_t utrst = rUTRSTAT0;
@@ -103,10 +103,9 @@ static dt_node_t* serial_dt_node(void)
 uint32_t orig_rUCON0, orig_rULCON0, orig_rUFCON0, orig_rUMCON0;
 uint64_t gUartBase;
 extern uint32_t gLogoBitmap[32];
-void serial_early_init() {
+void serial_early_init(void) {
     disable_interrupts();
-    gUartBase = dt_node_u32(serial_dt_node(), "reg", 0);
-    gUartBase += gIOBase;
+    gUartBase = gIOBase + dt_node_u64(serial_dt_node(), "reg", 0);
     orig_rUCON0  = rUCON0;
     orig_rULCON0 = rULCON0;
     orig_rUFCON0 = rUFCON0;
@@ -137,7 +136,7 @@ void serial_early_init() {
     enable_interrupts();
 }
 
-void serial_pinmux_init() {
+void serial_pinmux_init(void) {
     // Pinmux debug UART on ATV4K
     // This will also pinmux uart0 on iPad Pro 2G
     if((strcmp(soc_name, "t8011") == 0)) {
@@ -147,13 +146,13 @@ void serial_pinmux_init() {
 }
 
 uint16_t uart_irq;
-void serial_disable_rx() {
+void serial_disable_rx(void) {
     uart_should_drop_rx = 1;
 }
-void serial_enable_rx() {
+void serial_enable_rx(void) {
     uart_should_drop_rx = 0;
 }
-void serial_init() {
+void serial_init(void) {
     struct task* irq_task = task_create_extended("uart", uart_main, TASK_IRQ_HANDLER|TASK_PREEMPT, 0);
 
     disable_interrupts();

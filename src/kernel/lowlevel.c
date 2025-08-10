@@ -608,12 +608,24 @@ static pmgr_reg_t *gPMGRreg = NULL;
 static pmgr_map_t *gPMGRmap = NULL;
 static pmgr_dev_t *gPMGRdev = NULL;
 
+// TODO: ios 8
+//void* dt_node_prop_no_err(dt_node_t *node, const char *prop, size_t *size)
+//{
+//    void *val = dt_prop(node, prop, size);
+//    if (!val) {
+//        return NULL;
+//    }
+//    return val;
+//}
+
 void pmgr_init(void)
 {
     dt_node_t *pmgr = dt_get("/arm-io/pmgr");
     gPMGRreg = dt_node_prop(pmgr, "reg",     &gPMGRreglen);
     gPMGRmap = dt_node_prop(pmgr, "ps-regs", &gPMGRmaplen);
     gPMGRdev = dt_node_prop(pmgr, "devices", &gPMGRdevlen);
+    //gPMGRmap = dt_node_prop_no_err(pmgr, "ps-regs", &gPMGRmaplen);
+    //gPMGRdev = dt_node_prop_no_err(pmgr, "devices", &gPMGRdevlen);
     gPMGRreglen /= sizeof(*gPMGRreg);
     gPMGRmaplen /= sizeof(*gPMGRmap);
     gPMGRdevlen /= sizeof(*gPMGRdev);

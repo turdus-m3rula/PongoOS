@@ -124,8 +124,25 @@ int sigcheck(volatile void *boot_image)
         }
     }
     
+    // case 3, we have iOS 8, so... it is so annoying
+    // 000000087a18fe74         mov        w9, #0x44470000
+    // 000000087a18fe78         movk       w9, #0x5354
+    // 000000087a18fe7c         cmp        w20, w9
+    // 000000087a18fe80         b.ne       loc_87a1901b8
     if (!dgst) {
-        return 3;
+        cur = (volatile uint32_t*)boot_image;
+        volatile uint32_t* mov_w9 = patchfind_forward(cur, 0x52a888e9, 0xffffffff, 0x7ff00); // mov w9, #0x44470000
+        if (mov_w9) {
+            // check that the next instruction is what we expect
+            if (mov_w9[1] != 0x728a6a89) { // movk  w9, #0x5354
+                return 2;
+            }
+            dgst = mov_w9;
+        }
+    }
+    
+    if (!dgst) {
+        return 4;
     }
     
     // Next we need to find the end point of this function.
@@ -153,7 +170,21 @@ int sigcheck(volatile void *boot_image)
     }
     
     if (!found) {
-        return 4;
+        frame = dgst;
+        for (int i = 0; i < 2000; i++) {
+            if ((frame[i + 0] & 0xffc07fff) == 0xa9407bfd && // ldp fp, lr, [sp, #X]
+                (frame[i + 1] & 0xffc043f0) == 0xa94043f0 && // ldp x{16-31}, x{16-31}, [sp, #X]
+                (frame[i + 2] & 0xffc043f0) == 0xa94043f0 && // ldp x{16-31}, x{16-31}, [sp, #X]
+                (frame[i + 3] & 0xffc003e0) == 0xa8c003e0) { // 
+                frame = &frame[i];
+                found = 1;
+                break;
+            }
+        }
+    }
+    
+    if (!found) {
+        return 5;
     }
     
     // Finally, we need to patch this function so that it always returns 0.
@@ -207,7 +238,7 @@ int sigcheck(volatile void *boot_image)
         return 0;
     }
     
-    return 5;
+    return 6;
 }
 
 void patch_bootloader(void* boot_image)

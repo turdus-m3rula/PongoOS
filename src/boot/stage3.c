@@ -367,9 +367,18 @@ void patch_bootloader(void* boot_image)
         //  str wN, [xM]
         //  ldr wS, [xM]
         //  tbz wS, 0, ...
+        // And just because clang hates us, at least A7 on 10.3.3 has a completely unnecessary mov in between:
+        //  str wN, [xM]
+        //  ldr wT, [xM]
+        //  tbz wT, 0, ...
+        //  mov wZ, 1
+        //  str wZ, [xM, 4]
+        //  ldr wS, [xM, 4]
+        //  tbz wS, 0, ...
         // We require that T and S are <16, and that the two tbz have positive offset.
         // /x 000000b9000040b900000036000400b9000440b900000036:00fcffff10fcffff0000fcff00fcffff10fcffff0000fcff
         // /x 000000b9000040b9000000364000c0d2802281f2000000b9000040b900000036:00fcffff10fcffff0000fcffe0ffffffe0ffffff00fcffff10fcffff0000fcff
+        // /x 000000b9000040b900000036e0030032000400b9000440b900000036:00fcffff10fcffff0000fcffe0ffffff00fcffff10fcffff0000fcff
         if((op1 & 0xfffffc00) == 0xb9000000 && (op2 & 0xfffffff0) == ((op1 & 0x000003e0) | 0xb9400000) && (op3 & 0xfffc001f) == ((op2 & 0x0000001f) | 0x36000000))
         {
             volatile uint32_t *one = p,
@@ -377,14 +386,22 @@ void patch_bootloader(void* boot_image)
             uint32_t op4 = two[0],
                      op5 = two[1];
             uint32_t imm = 1; // 1 << 2
+            uint32_t regs = op1 & 0x3ff;
             if(op4 == (((op1 & 0x000003e0) >> 5) | 0xd2c00040) && op5 == (((op1 & 0x000003e0) >> 5) | 0xf2812280))
             {
                 two += 2;
+                imm = 0;
                 op4 = two[0];
                 op5 = two[1];
-                imm = 0;
             }
-            if(op4 == ((op1 & 0x000003ff) | (imm << 10) | 0xb9000000) && (op5 & 0xfffffff0) == ((op1 & 0x000003e0) | (imm << 10) | 0xb9400000) && (two[2] & 0xfffc001f) == ((op5 & 0x0000001f) | 0x36000000))
+            else if((op4 & 0xffffffe0) == 0x320003e0) // orr wZ, wzr, 1
+            {
+                two += 1;
+                regs = (regs & ~0x1f) | (op4 & 0x1f);
+                op4 = two[0];
+                op5 = two[1];
+            }
+            if(op4 == (regs | (imm << 10) | 0xb9000000) && (op5 & 0xfffffff0) == ((op1 & 0x000003e0) | (imm << 10) | 0xb9400000) && (two[2] & 0xfffc001f) == ((op5 & 0x0000001f) | 0x36000000))
             {
                 // Nop them all out.
                 one[0] = 0xd503201f;

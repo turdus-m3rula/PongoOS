@@ -471,6 +471,79 @@ void patch_bootloader(void* boot_image)
             tz_done = true;
             break;
         }
+        // A9X, early iOS 10
+        // This SoC has the curious fact of having more than one AMCC
+        // As such, Trustzone registers have to be locked twice, and we can
+        // patchfind this through the loop in which it increases by 0x200000 (the difference between both AMCC base addr)
+        // in other SoCs this is optimized out (please?) due to only 1 AMCC
+        // early iOS 10 seems to only use X8 so this should be fine
+        else if((op1 & 0xffffffff) == 0x91480108)
+        {
+            volatile uint32_t* curr = (uint32_t*)p;
+            volatile uint32_t* tbz = (uint32_t*)(curr - 1);
+            if ((*tbz & 0x7f000000) != 0x36000000) {
+                break;
+            }
+            volatile uint32_t* ldr = (uint32_t*)(tbz - 1);
+            volatile uint32_t* str = (uint32_t*)(tbz - 2);
+
+            if ((*ldr & 0xbfc00000) != 0xb9400000 ||  (*str & 0xbfc00000) != 0xb9000000) {
+                // not LDR | not STR
+                break;
+            }
+
+            uint32_t tbz_reg = *tbz & 0x1f;
+            uint32_t ldr_reg = *ldr & 0x1f;
+            //uint32_t str_reg = (*str >> 5) & 0x1f; // base reg
+
+            if(tbz_reg != ldr_reg) {
+                // reg is not the same
+                break;
+            }
+
+            // take 2, tbnz now
+
+            volatile uint32_t *tbnz = NULL;
+            for(size_t i = 1; i <= 10; ++i)
+            {
+                uint32_t op = curr[i];
+                if((op & 0x7f000000) == 0x37000000)
+                {
+                    tbnz = &curr[i];
+                    break;
+                }
+            }
+
+            volatile uint32_t* ldr2 = (uint32_t*)(tbnz - 1);
+            volatile uint32_t* str2 = (uint32_t*)(tbnz - 2);
+
+            if ((*ldr2 & 0xbfc00000) != 0xb9400000 ||  (*str2 & 0xbfc00000) != 0xb9000000) {
+                // not LDR || not STR
+                break;
+            }
+
+            uint32_t tbnz_reg = *tbnz & 0x1f;
+            uint32_t ldr2_reg = *ldr2 & 0x1f;
+            //uint32_t str2_reg = (*str2 >> 5) & 0x1f; // base reg
+
+            if(tbnz_reg != ldr2_reg) {
+                // reg is not the same
+                break;
+            }
+
+            // only now can we be sure we can patch this...
+            // nop the str before the tbz
+            *str = 0xd503201f;
+            // turn the ldr into a mov reg, #1
+            *ldr = (*ldr & 0x1f) | 0x52800020;
+            // nop this too
+            *str2 = 0xd503201f;
+            // and make this a mov reg, #1 too
+            *ldr2 = (*ldr2 & 0x1f) | 0x52800020;
+            
+            tz_done = true;
+            break;
+        }
     }
 
     iorvbar_yeet(boot_image);
